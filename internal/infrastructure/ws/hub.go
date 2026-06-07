@@ -69,6 +69,18 @@ func (h *Hub) Run() {
 	}
 }
 
+func (h *Hub) Publish(event string, data interface{}) error {
+	msg, err := json.Marshal(map[string]interface{}{
+		"event":   event,
+		"data":    data,
+	})
+	if err != nil {
+		return err
+	}
+	h.broadcast <- msg
+	return nil
+}
+
 func (h *Hub) BroadcastEvent(event string, slotID uint) {
 	msg, err := json.Marshal(map[string]interface{}{
 		"event":   event,
