@@ -1,44 +1,43 @@
 package main
 
 import (
-	"log"
-
-	"ticketing-application/internal/config"
-	"ticketing-application/internal/database"
-	"ticketing-application/internal/handler"
-	"ticketing-application/internal/ws"
+	deliveryhttp "ticketing-application/internal/delivery/http"
+	"ticketing-application/internal/infrastructure"
+	"ticketing-application/internal/infrastructure/ws"
+	"ticketing-application/internal/repository/postgres"
+	"ticketing-application/internal/repository/redis"
+	"ticketing-application/internal/usecase"
 
 	"github.com/gin-gonic/gin"
-	"github.com/joho/godotenv"
 )
 
 func main() {
-	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found, using OS environment variables")
-	} else {
-		log.Println("Loaded .env file:")
-		log.Printf("  DB:     %s:%s/%s (user=%s)", config.GetEnv("DB_HOST", ""), config.GetEnv("DB_PORT", ""), config.GetEnv("DB_NAME", ""), config.GetEnv("DB_USER", ""))
-		log.Printf("  Redis:  %s", config.GetEnv("REDIS_ADDR", ""))
-		log.Printf("  Server: :%s", config.GetEnv("SERVER_PORT", ""))
-	}
-	database.InitDB()
-	database.InitRedis()
+	cfg := infrastructure.LoadConfig()
 
+	db := infrastructure.NewPostgresDB(cfg)
+	postgres.AutoMigrate(db)
+	postgres.SeedSlots(db)
+
+	rdb := infrastructure.NewRedisClient(cfg)
+
+	slotRepo := postgres.NewSlotRepository(db)
+	lockRepo := redis.NewDistributedLock(rdb)
 	hub := ws.NewHub()
 	go hub.Run()
-	handler.SlotHub = hub
+
+	slotUC := usecase.NewSlotUseCase(slotRepo, lockRepo, hub)
+	slotHandler := deliveryhttp.NewSlotHandler(slotUC)
 
 	r := gin.Default()
 
 	v1 := r.Group("/api/v1")
 	{
-		v1.GET("/slots", handler.GetSlots)
-		v1.POST("/slots/book", handler.BookSlot)
+		v1.GET("/slots", slotHandler.GetSlots)
+		v1.POST("/slots/book", slotHandler.BookSlot)
 		v1.GET("/ws", func(c *gin.Context) {
 			hub.ServeWS(c.Writer, c.Request)
 		})
 	}
 
-	port := config.GetEnv("SERVER_PORT", "8080")
-	r.Run(":" + port)
+	r.Run(":" + cfg.ServerPort)
 }
