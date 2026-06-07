@@ -7,9 +7,12 @@ import (
 
 	"ticketing-application/internal/database"
 	"ticketing-application/internal/model"
+	"ticketing-application/internal/ws"
 
 	"github.com/gin-gonic/gin"
 )
+
+var SlotHub *ws.Hub
 
 func GetSlots(c *gin.Context) {
 	var slots []model.Slot
@@ -44,6 +47,11 @@ func BookSlot(c *gin.Context) {
 		c.JSON(http.StatusConflict, gin.H{"error": "Slot is currently being booked by another user"})
 		return
 	}
+
+	if SlotHub != nil {
+		SlotHub.BroadcastEvent("slot_locked", req.SlotID)
+	}
+
 	defer database.RDB.Del(c.Request.Context(), lockKey)
 
 	var slot model.Slot
