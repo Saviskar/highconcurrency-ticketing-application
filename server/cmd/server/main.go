@@ -8,6 +8,7 @@ import (
 	"ticketing-application/internal/repository/redis"
 	"ticketing-application/internal/usecase"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
 
@@ -29,6 +30,13 @@ func main() {
 	slotHandler := deliveryhttp.NewSlotHandler(slotUC)
 
 	r := gin.Default()
+
+	r.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"http://localhost:5173"},
+		AllowMethods:     []string{"GET", "POST", "OPTIONS"},
+		AllowHeaders:     []string{"Content-Type"},
+		AllowCredentials: true,
+	}))
 
 	v1 := r.Group("/api/v1")
 	{
